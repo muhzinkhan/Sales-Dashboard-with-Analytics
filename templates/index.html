@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Dashboard</title>
+</head>
+<body>
+    <h1>Sales Dashboard</h1>
+    
+    <h2>Total Sales: ${{ total_sales }}</h2>
+    <h2>Top-Selling Product: {{ top_selling_product }}</h2>
+    
+    <h3>Sales Trend Over Time:</h3>
+    <img src="data:image/png;base64,{{ plot_url }}" alt="Sales Trend">
+</body>
+</html>
