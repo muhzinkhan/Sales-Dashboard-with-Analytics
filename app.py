@@ -1,3 +1,5 @@
+# Optimize imports
+from flask import Flask, render_template
 import pandas as pd
 from sqlalchemy import create_engine
 from collections import defaultdict
@@ -5,6 +7,9 @@ from typing import DefaultDict
 import re
 import os
 import dotenv
+import io
+import base64
+from visualizations import top_selling_products, sales_trend
 
 
 # load Environmental variables
@@ -21,8 +26,11 @@ engine = create_engine(
     f"mysql+mysqlconnector://{USERNAME}:{PASSWORD}@{HOST}/{DATABASE_NAME}"
 )
 
+# Create Flask App
+app = Flask(__name__)
 
-def fetch_all(engine) -> DefaultDict[str, pd.DataFrame]:
+
+def query_all(engine) -> DefaultDict[str, pd.DataFrame]:
     """Queries all tables from the database"""
 
     dfs = defaultdict(pd.DataFrame)  # Defining a default dictionary for the dataframes
@@ -36,6 +44,15 @@ def fetch_all(engine) -> DefaultDict[str, pd.DataFrame]:
         # print(f"<------------------{table_name} ------------------>\n\n", dfs[table_name].head(), '\n\n')
 
     return dfs
+
+
+# TODO unused
+def query_one(engine, table_name) -> DefaultDict[str, pd.DataFrame]:
+    """Queries all tables from the database"""
+    dfs = defaultdict(pd.DataFrame)  # Defining a default dictionary for the dataframes
+    query = f"SELECT * FROM `{table_name}`;"
+    df = pd.read_sql(query, con=engine)
+    return df
 
 
 def concatinate_all_sales_table(dfs: DefaultDict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -59,7 +76,70 @@ def concatinate_all_sales_table(dfs: DefaultDict[str, pd.DataFrame]) -> pd.DataF
     return concat_sales_table
 
 
+def encode_plt(plt) -> str:
+    """encodes the axes(plt) object for the flask app"""
+    img = io.BytesIO()
+    plt.savefig(img, format="png")
+    img.seek(0)
+    plot_url = base64.b64encode(img.getvalue()).decode()
+    return plot_url
+
+
+def generate_dates_table(date_min, date_max, sales_table) -> pd.DataFrame:
+    date_min = sales_table['Order Date'].min()
+    date_max = sales_table['Order Date'].max()
+    date_min, date_max
+
+    calender_dates = pd.date_range(start=date_min, end=date_max, freq='D')
+    dates_table = pd.DataFrame(calender_dates, columns=['Order Date'])
+    dates_table
+
+
+
 # <------------------ Main Script ------------------>
-dfs = fetch_all(engine=engine)
-sales_table = concatinate_all_sales_table(dfs=dfs)
-print(sales_table)
+# dfs = query_all(engine=engine)
+# sales_table = concatinate_all_sales_table(dfs=dfs)
+
+
+# KPI's -------------->
+
+
+## Sales Trend
+# yearly_sales, plt = sales_trend(sales_table)
+# plt.show()
+
+## Total Sales
+
+## Total Cost
+
+## Total Profit
+
+## Yearly Sales Distribution
+
+## Sales Heat Map
+
+
+@app.route("/")
+def dashboard():
+    # Read data from SQL
+    dfs = query_all(engine=engine)
+    sales_table = concatinate_all_sales_table(dfs=dfs)
+
+    # Create a plot for the top 10 selling products
+    top_10_products_table, top_10_products_table_plt = top_selling_products(
+        products_table=dfs["products"], sales_table=sales_table, rank=10
+    )
+
+
+
+
+    return render_template(
+        "index.html",
+        total_sales="NA;;;;",
+        top_selling_product="NA",
+        plot_url=encode_plt(top_10_products_table_plt),
+    )
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
