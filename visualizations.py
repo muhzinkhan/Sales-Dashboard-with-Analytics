@@ -2,13 +2,25 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import DefaultDict
+import io
+import base64
+from typing import DefaultDict, Tuple
 from matplotlib.ticker import FuncFormatter
+from matplotlib.figure import Figure
+
+
+def encode_plt(ax) -> str:
+    """encodes the axes/plt object for the flask app"""
+    img = io.BytesIO()
+    ax.savefig(img, format="png")
+    img.seek(0)
+    plot_url = base64.b64encode(img.getvalue()).decode()
+    return plot_url
 
 
 def top_selling_products(
     products_table: pd.DataFrame, sales_table: pd.DataFrame, rank: int
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, Figure, str]:
     """Top selling products"""
     df = sales_table.merge(products_table, on="Product ID", how="left")[
         ["Product Name", "Total Sales"]
@@ -45,10 +57,10 @@ def top_selling_products(
     # plt.title(f"Top {rank} Products", pad=10, fontweight="bold")
     plt.tight_layout()
 
-    return top_n_products, plt
+    return top_n_products, plt, encode_plt(plt)
 
 
-def sales_trend(sales_table):
+def sales_trendxxxx(sales_table):
     """Plot Sales trend year-wise"""
     df3 = sales_table[["Order Date", "Total Sales"]]
     df3
@@ -111,3 +123,43 @@ def sales_trend(sales_table):
     plt.tight_layout()
 
     return yearly_sales, plt
+
+
+def sales_trends(dates_table, sales_table) -> Tuple[pd.DataFrame, Figure, str]:
+    """"""
+    # Merge all dates with all sales
+    df = dates_table.merge(sales_table, on='Order Date', how='left', )[list(dates_table.columns) + ['Total Sales']]
+    df.fillna(0, inplace=True)
+
+    print(df)
+
+    yearly_sales = df.pivot_table(index='Year', values='Total Sales', aggfunc='sum')
+    yearly_sales.map(lambda x: f"{x:,}")
+
+    # 
+    y_axis_split = 3
+
+    y_tickers = np.linspace(yearly_sales['Total Sales'].min(), yearly_sales['Total Sales'].max(), y_axis_split)
+    y_tick_labels = [f"$ {x/10**6:.2f} M" for x in (y_tickers)]
+
+
+    plt.figure(figsize=(5, 4))
+
+    ax = sns.barplot(x=yearly_sales.index, y=yearly_sales["Total Sales"])
+    plt.yticks(y_tickers, labels=y_tick_labels)
+    plt.xlabel("")
+    ax.margins(x=0.05, y=0.1)
+
+    for p in ax.patches:
+        ax.annotate(
+            f"$ {p.get_height():,.0f}",
+            xy=(p.get_x() + p.get_width() / 2.0, p.get_height()),
+            ha="center",
+            va="center",
+            xytext=(0, 9),
+            textcoords="offset points",
+        )
+    plt.title("Yearly Sales", pad=10, fontweight="bold")
+    plt.tight_layout()
+
+    return yearly_sales, plt, encode_plt(plt)

@@ -4,12 +4,8 @@ import pandas as pd
 from sqlalchemy import create_engine
 from collections import defaultdict
 from typing import DefaultDict
-import re
-import os
-import dotenv
-import io
-import base64
-from visualizations import top_selling_products, sales_trend
+import re, os, dotenv
+from visualizations import top_selling_products, sales_trends
 
 
 # load Environmental variables
@@ -76,24 +72,24 @@ def concatinate_all_sales_table(dfs: DefaultDict[str, pd.DataFrame]) -> pd.DataF
     return concat_sales_table
 
 
-def encode_plt(plt) -> str:
-    """encodes the axes(plt) object for the flask app"""
-    img = io.BytesIO()
-    plt.savefig(img, format="png")
-    img.seek(0)
-    plot_url = base64.b64encode(img.getvalue()).decode()
-    return plot_url
+def generate_dates_table(sales_table: pd.DataFrame) -> pd.DataFrame:
+    """Generate dates with necessary measures"""
+    date_min = sales_table["Order Date"].min()
+    date_max = sales_table["Order Date"].max()
 
+    calender_dates = pd.date_range(start=date_min, end=date_max, freq="D")
+    dates_table = pd.DataFrame(calender_dates, columns=["Order Date"])
 
-def generate_dates_table(date_min, date_max, sales_table) -> pd.DataFrame:
-    date_min = sales_table['Order Date'].min()
-    date_max = sales_table['Order Date'].max()
-    date_min, date_max
+    dates_table["Year"] = dates_table["Order Date"].dt.year
+    dates_table["Qtr"] = dates_table["Order Date"].dt.quarter
+    dates_table["Month Name"] = dates_table["Order Date"].dt.month_name()
 
-    calender_dates = pd.date_range(start=date_min, end=date_max, freq='D')
-    dates_table = pd.DataFrame(calender_dates, columns=['Order Date'])
-    dates_table
+    dates_table["Year Qtr"] = (
+        dates_table["Year"].astype(str) + " Qtr " + dates_table["Qtr"].astype(str)
+    )
+    dates_table["Year Monthname"] = dates_table["Order Date"].dt.strftime("%Y %B")
 
+    return dates_table
 
 
 # <------------------ Main Script ------------------>
@@ -124,20 +120,24 @@ def dashboard():
     # Read data from SQL
     dfs = query_all(engine=engine)
     sales_table = concatinate_all_sales_table(dfs=dfs)
+    dates_table = generate_dates_table(sales_table=sales_table)
+
+    # dictionary for all measures and visualizations for rendering in html
+    dash_json = defaultdict(tuple)
 
     # Create a plot for the top 10 selling products
-    top_10_products_table, top_10_products_table_plt = top_selling_products(
+    dash_json["top_selling_products"] = top_selling_products(
         products_table=dfs["products"], sales_table=sales_table, rank=10
     )
 
-
-
+    dash_json["sales_trends"] = sales_trends(dates_table, sales_table)
 
     return render_template(
         "index.html",
-        total_sales="NA;;;;",
+        total_sales="NA!!!",
         top_selling_product="NA",
-        plot_url=encode_plt(top_10_products_table_plt),
+        plot_url1=dash_json["top_selling_products"][2],
+        plot_url2=dash_json["sales_trends"][2],
     )
 
 
