@@ -9,6 +9,8 @@ sales_sheet = pd.read_excel("data\data.xlsx", sheet_name=None)
 
 dotenv.load_dotenv()
 
+DIALECT = "mysql"
+DRIVER = "mysqlconnector"
 DATABASE_NAME = os.getenv("DATABASE_NAME")
 HOST = os.getenv("HOST")
 USERNAME = os.getenv("USERNAME")
@@ -17,7 +19,7 @@ PASSWORD = os.getenv("PASSWORD")
 
 # Create MySQL connection
 engine = create_engine(
-    f"mysql+mysqlconnector://{USERNAME}:{PASSWORD}@{HOST}/{DATABASE_NAME}"
+    f"{DIALECT}+{DRIVER}://{USERNAME}:{PASSWORD}@{HOST}/{DATABASE_NAME}"
 )
 
 # Write data to MySQL

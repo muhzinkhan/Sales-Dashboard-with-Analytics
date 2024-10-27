@@ -1,16 +1,17 @@
-# Optimize imports
-from flask import Flask, render_template
+from flask import Flask, render_template, request, send_file, redirect, url_for
 import pandas as pd
 from sqlalchemy import create_engine
 from collections import defaultdict
 from typing import DefaultDict
-import re, os, dotenv
-from visualizations import top_selling_products, sales_trends
+import re, os, base64, dotenv
+import visualizations as vis
 
 
 # load Environmental variables
 dotenv.load_dotenv()
 
+DIALECT = "mysql"
+DRIVER = "mysqlconnector"
 DATABASE_NAME = os.getenv("DATABASE_NAME")
 HOST = os.getenv("HOST")
 USERNAME = os.getenv("USERNAME")
@@ -19,7 +20,7 @@ PASSWORD = os.getenv("PASSWORD")
 
 # Create MySQL connection
 engine = create_engine(
-    f"mysql+mysqlconnector://{USERNAME}:{PASSWORD}@{HOST}/{DATABASE_NAME}"
+    f"{DIALECT}+{DRIVER}://{USERNAME}:{PASSWORD}@{HOST}/{DATABASE_NAME}"
 )
 
 # Create Flask App
@@ -36,19 +37,8 @@ def query_all(engine) -> DefaultDict[str, pd.DataFrame]:
     for table_name in tables.iloc[:, 0].values:
         query = f"SELECT * FROM `{table_name}`;"
         dfs[table_name] = pd.read_sql(query, con=engine)
-        # TODO delete this print statement
-        # print(f"<------------------{table_name} ------------------>\n\n", dfs[table_name].head(), '\n\n')
 
     return dfs
-
-
-# TODO unused
-def query_one(engine, table_name) -> DefaultDict[str, pd.DataFrame]:
-    """Queries all tables from the database"""
-    dfs = defaultdict(pd.DataFrame)  # Defining a default dictionary for the dataframes
-    query = f"SELECT * FROM `{table_name}`;"
-    df = pd.read_sql(query, con=engine)
-    return df
 
 
 def concatinate_all_sales_table(dfs: DefaultDict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -92,53 +82,89 @@ def generate_dates_table(sales_table: pd.DataFrame) -> pd.DataFrame:
     return dates_table
 
 
-# <------------------ Main Script ------------------>
-# dfs = query_all(engine=engine)
-# sales_table = concatinate_all_sales_table(dfs=dfs)
-
-
-# KPI's -------------->
-
-
-## Sales Trend
-# yearly_sales, plt = sales_trend(sales_table)
-# plt.show()
-
-## Total Sales
-
-## Total Cost
-
-## Total Profit
-
-## Yearly Sales Distribution
-
-## Sales Heat Map
-
-
 @app.route("/")
 def dashboard():
-    # Read data from SQL
+
+    # Read data from SQL Database
     dfs = query_all(engine=engine)
+    table_names = dfs.keys()
     sales_table = concatinate_all_sales_table(dfs=dfs)
     dates_table = generate_dates_table(sales_table=sales_table)
 
-    # dictionary for all measures and visualizations for rendering in html
-    dash_json = defaultdict(tuple)
+    # dictionary for all measures for rendering in html
+    measure_data = defaultdict(str)
+
+    # dictionary for all visualizations for rendering in html
+    plot_data = defaultdict(tuple)
 
     # Create a plot for the top 10 selling products
-    dash_json["top_selling_products"] = top_selling_products(
-        products_table=dfs["products"], sales_table=sales_table, rank=10
+    top_products_num = 10
+    plot_data["top_n_products"] = vis.top_n_products(
+        products_table=dfs["products"], sales_table=sales_table, num=top_products_num
     )
 
-    dash_json["sales_trends"] = sales_trends(dates_table, sales_table)
+    # Create a plot for yearly sales trend
+    plot_data["yearly_sales_trend"] = vis.sales_trends(
+        dates_table, sales_table, kind="yearly"
+    )
+
+    # Create a plot for quarterly sales trend
+    plot_data["quarterly_sales_trend"] = vis.sales_trends(
+        dates_table, sales_table, kind="quarterly"
+    )
+
+    # Create a plot for monthly sales trend
+    plot_data["monthly_sales_trend"] = vis.sales_trends(
+        dates_table, sales_table, kind="monthly"
+    )
+
+    # Calculates all the measures for the dashboard
+    measure_data = vis.calculate_measures(
+        sales_table=sales_table,
+        products_table=dfs["products"],
+        monthly_sales=plot_data["monthly_sales_trend"][0],
+    )
+
+    # Create a pie chart for yearly sales proportion
+    plot_data["yearly_sales_distribution"] = vis.yearly_sales_dist_pie(
+        plot_data["yearly_sales_trend"][0]
+    )
+
+    # Create a heatmap for all the sales that  happened
+    plot_data["sales_heat_map"] = vis.sales_heat_map(
+        dates_table=dates_table, sales_table=sales_table
+    )
 
     return render_template(
         "index.html",
-        total_sales="NA!!!",
-        top_selling_product="NA",
-        plot_url1=dash_json["top_selling_products"][2],
-        plot_url2=dash_json["sales_trends"][2],
+        measure_data=measure_data,
+        plot_data=plot_data,
+        table_names=table_names,
+        top_products_num=top_products_num,
     )
+
+
+@app.route("/download", methods=["POST"])
+def download():
+    plot_data = request.form.get("data")
+
+    # Decode the base64 string
+    image_data = base64.b64decode(plot_data)
+
+    # Create an output file and write the image data
+    with open(f"static/img/session/downloaded_plot.png", "wb") as file:
+        file.write(image_data)
+
+    return send_file(
+        f"static/img/session/downloaded_plot.png",
+        as_attachment=True,
+        download_name=f"downloaded_plot.png",
+    )
+
+
+@app.route("/tables")
+def tables():
+    return redirect(url_for("dashboard"))
 
 
 if __name__ == "__main__":

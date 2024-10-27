@@ -10,9 +10,11 @@
 .LSOverride
 Icon
 
-# Custom
+# Gitignore by muhzinkhan
 backup/
+.archive/
 .NOT-COMPLETED
+visualizations.ipynb
 
 # and thumbnails
 ._*
